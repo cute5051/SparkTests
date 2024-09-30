@@ -60,9 +60,10 @@ public class TestCycle {
                     test_bal30 = new Double[30];
                     mega_test_value = 0;
                     mega_test_value_temp = 0;
+                    diff = 0;
                     next = false;
                 } else {
-                    diff = (int) Math.abs(ChronoUnit.DAYS.between(input.get(ind - 1).getOptn(), optn)) - 2;
+                    diff = (int) Math.abs(ChronoUnit.DAYS.between(input.get(ind - 1).getOptn(), optn)) - 1;
                     step -= diff;
                     step = step < 0 ? 0 : step;
                 }
