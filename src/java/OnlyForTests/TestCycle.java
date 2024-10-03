@@ -1,28 +1,55 @@
 package OnlyForTests;
 
-import org.threeten.extra.Days;
+import org.apache.spark.HashPartitioner;
+import org.apache.spark.api.java.JavaPairRDD;
+import org.apache.spark.api.java.function.FlatMapFunction;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SparkSession;
+import scala.Tuple2;
+import scala.Tuple3;
+import scala.Tuple4;
+import scala.Tuple5;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.GregorianCalendar;
-import java.util.List;
+import java.util.*;
 
+import static OnlyForTests.ElementPojo.convertRowInThis;
 import static OnlyForTests.TestDataGenerator.static_test_data;
 import static OnlyForTests.TestDataGenerator.test_data;
 
 public class TestCycle {
 
     public static void main(String[] args) {
-        TestCycle tc = new TestCycle();
-        tc.calculate(static_test_data());
+        SparkSession spark = SparkSession.builder()
+                .config("spark.master", "local")
+                .appName("java.LogAnalyzer").getOrCreate();
+
+        JavaPairRDD<String, Row> pairRDD = spark.createDataFrame(static_test_data(), ElementPojo.class).javaRDD()
+                .mapToPair(x -> new Tuple2<String, Row>(x.getAs("cli_key"), x))
+                .partitionBy(new HashPartitioner(5));
+
+
+        pairRDD.mapPartitions(new FlatMapFunction<Iterator<Tuple2<String, Row>>, Tuple5>() {
+                    @Override
+                    public Iterator<Tuple5> call(Iterator<Tuple2<String, Row>> tuple2Iterator) throws Exception {
+                        return calculate(tuple2Iterator);
+                    }
+                }).collect().forEach(System.out::println);
+
     }
 
-    public void calculate(List<ElementPojo> input) {
-        Comparator<ElementPojo> comparator = Comparator.comparing(person -> person.getCli_key());
-        comparator = comparator.thenComparing(Comparator.comparing(person -> person.getOptn())).reversed();
+    public static Iterator<Tuple5> calculate(Iterator<Tuple2<String, Row>> data) {
+        long start = System.currentTimeMillis();
+        List<ElementPojo> input = new ArrayList<>();
+        List<Tuple5> result = new ArrayList<>();
+        while (data.hasNext()) {
+            input.add(convertRowInThis(data.next()._2));
+        }
+
+        Comparator<ElementPojo> comparator = Comparator.comparing(x -> x.getCli_key());
+        comparator = comparator.thenComparing(Comparator.comparing(x -> x.getOptn())).reversed();
         input.sort(comparator);
 
         int ind = 0;
@@ -50,7 +77,7 @@ public class TestCycle {
                 mega_test_value = mega_test_value <= 30 ? mega_test_value : 30;
                 for (int x = mega_test_value_temp; x < mega_test_value; x++) {
                     test_bal30[x] = balance;
-                    System.out.println(String.format("INC: %s, DATE_OF_BALANCE: %s, BALANCE: %s, mega_test_value: %s", x, LocalDate.parse("2024-02-17", DateTimeFormatter.ofPattern("yyyy-MM-dd")).minusDays(x), test_bal30[x], mega_test_value));
+//                    System.out.println(String.format("INC: %s, DATE_OF_BALANCE: %s, BALANCE: %s, mega_test_value: %s", x, LocalDate.parse("2024-02-17", DateTimeFormatter.ofPattern("yyyy-MM-dd")).minusDays(x), test_bal30[x], mega_test_value));
                 }
                 mega_test_value_temp = mega_test_value;
             }
@@ -82,14 +109,20 @@ public class TestCycle {
                     if (!cli.equals(temp_cli)) break;
 
                     if (ChronoUnit.DAYS.between(temp_optn, optn) >= step) {
-                        System.out.println(String.format("=============DAYS BETW:%s==========step:%s====ind:%s==i:%s==diff:%s=================", ChronoUnit.DAYS.between(temp_optn, optn), step, ind, i, diff));
-                        System.out.println(String.format("1optn: %s, 2optn: %s", optn.plusDays(30-step), optn.minusDays(step)));
-                        System.out.println(String.format("cli: %s, optn: %s, balance: %s", cli, optn, balance));
-                        System.out.println(String.format("tempcli: %s, tempoptn: %s, tempbalance: %s", temp_cli, temp_optn, temp_balance));
+//                        System.out.println(String.format("=============DAYS BETW:%s==========step:%s====ind:%s==i:%s==diff:%s=================", ChronoUnit.DAYS.between(temp_optn, optn), step, ind, i, diff));
+//                        System.out.println(String.format("1optn: %s, 2optn: %s", optn.plusDays(30-step), optn.minusDays(step)));
+//                        System.out.println(String.format("cli: %s, optn: %s, balance: %s", cli, optn, balance));
+//                        System.out.println(String.format("tempcli: %s, tempoptn: %s, tempbalance: %s", temp_cli, temp_optn, temp_balance));
 
                         int percent = (int) ((balance / temp_balance) * 100);
                         if (percent < 80) {
                             next = true;
+                            result.add(new Tuple5<>(cli, optn, balance, percent, optn.plusDays(30-step)));
+
+                            System.out.println(String.format("=============DAYS BETW:%s==========step:%s====ind:%s==i:%s==diff:%s=================", ChronoUnit.DAYS.between(temp_optn, optn), step, ind, i, diff));
+                            System.out.println(String.format("1optn: %s, 2optn: %s", optn.plusDays(30-step), optn.minusDays(step)));
+                            System.out.println(String.format("cli: %s, optn: %s, balance: %s", cli, optn, balance));
+                            System.out.println(String.format("tempcli: %s, tempoptn: %s, tempbalance: %s", temp_cli, temp_optn, temp_balance));
                             System.out.println(String.format("-----------------------cli: %s, perc: %s, unstable_date: %s---------------------------", cli, percent, optn.plusDays(30-step)));
                         }
                         break;
@@ -102,5 +135,7 @@ public class TestCycle {
             } while (diff >= 0);
 
         }
+//        System.out.println(String.format("====================WORK TIME: %s. Total rows: %s===================", System.currentTimeMillis() - start, ind));
+        return result.iterator();
     }
 }
